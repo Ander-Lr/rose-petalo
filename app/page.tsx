@@ -1,5 +1,9 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+
+import CatalogoFlores from '@/components/CatalogoFlores'
 
 export default function Home() {
   const [form, setForm] = useState({
@@ -8,6 +12,24 @@ export default function Home() {
   })
   const [enviado, setEnviado] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
+  const supabase = createClient()
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        router.push('/login')
+      } else {
+        setUser(session.user)
+        setLoading(false)
+      }
+    }
+    checkSession()
+  }, [router, supabase])
 
   const cambiar = (e: any) =>
     setForm({ ...form, [e.target.name]: e.target.value })
@@ -23,8 +45,20 @@ export default function Home() {
       body: JSON.stringify(form),
     })
     setIsSubmitting(false)
-    if (res.ok) setEnviado(true)
+    if (res.ok) {
+      setEnviado(true)
+    } else {
+      const errorData = await res.json()
+      console.error('Error al enviar el formulario:', errorData)
+      alert(`Ocurrió un error: ${errorData.error || 'Desconocido'}`)
+    }
   }
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 via-rose-50 to-pink-100 p-4">
+       <div className="animate-pulse flex items-center gap-2 text-pink-600">Cargando...</div>
+    </div>
+  )
 
   if (enviado)
     return (
@@ -33,16 +67,34 @@ export default function Home() {
           <div className="text-6xl mb-6">✨🌹✨</div>
           <h2 className="text-3xl font-serif text-pink-700 mb-3 font-bold">¡Gracias por tu pedido!</h2>
           <p className="text-gray-600 text-lg">Tu regalo ideal ha sido registrado exitosamente. Nos pondremos en contacto pronto.</p>
+          <button onClick={() => setEnviado(false)} className="mt-6 text-pink-500 underline text-sm">Hacer otro pedido</button>
         </div>
       </div>
     )
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-pink-100 py-12 px-4 relative overflow-hidden flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-pink-100 py-12 px-4 relative overflow-hidden flex flex-col items-center">
       {/* Elementos decorativos de fondo animados (Blobs) */}
       <div className="absolute top-10 left-10 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob"></div>
       <div className="absolute top-20 right-10 w-72 h-72 bg-rose-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-2000"></div>
       <div className="absolute -bottom-8 left-1/2 w-72 h-72 bg-pink-400 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-4000"></div>
+      
+      {user && (
+        <div className="w-full max-w-4xl flex justify-between items-center mb-8 relative z-10 px-4">
+          <span className="text-sm font-medium text-pink-600/80">
+            Logueado como: {user.email}
+          </span>
+          <button 
+            onClick={async () => {
+              await supabase.auth.signOut()
+              router.push('/login')
+            }}
+            className="text-xs bg-white/50 hover:bg-white text-pink-600 px-3 py-1.5 rounded-full transition-colors border border-pink-100 shadow-sm"
+          >
+            Cerrar sesión
+          </button>
+        </div>
+      )}
 
       <div className="max-w-lg w-full relative z-10 bg-white/70 backdrop-blur-xl border border-white/60 shadow-2xl shadow-pink-900/5 rounded-3xl p-8 sm:p-10 transition-all duration-300 hover:shadow-pink-500/10 animate-fade-in-up">
         <div className="text-center mb-8">
@@ -63,24 +115,20 @@ export default function Home() {
               className="w-full bg-white/80 border border-pink-100 rounded-xl px-4 py-3.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-400/50 focus:border-pink-400 focus:bg-white transition-all duration-300 shadow-sm" />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div className="relative">
-              <select name="color_rosa" onChange={cambiar}
-                className="w-full bg-white/80 border border-pink-100 rounded-xl px-4 py-3.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-pink-400/50 focus:border-pink-400 focus:bg-white transition-all duration-300 shadow-sm appearance-none cursor-pointer">
-                <option value="" className="text-gray-400">¿Qué rosas prefieres?</option>
-                <option value="Rojas">Rojas 🔴</option>
-                <option value="Rosadas">Rosadas 🌸</option>
-                <option value="Blancas">Blancas ⚪</option>
-                <option value="Mixtas">Mixtas ✨</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-pink-500">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-pink-600/90 mb-2">Selecciona tus flores favoritas del catálogo:</label>
+              {form.color_rosa && (
+                <div className="bg-pink-100 text-pink-700 px-3 py-1.5 rounded-full inline-block text-xs font-semibold mb-2">
+                  Seleccionado: {form.color_rosa}
+                </div>
+              )}
+              <CatalogoFlores onSelect={(nombre) => setForm({ ...form, color_rosa: nombre })} />
             </div>
 
-            <input name="cantidad_rosas" type="number" placeholder="¿Cuántas rosas?" onChange={cambiar}
-              className="w-full bg-white/80 border border-pink-100 rounded-xl px-4 py-3.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-400/50 focus:border-pink-400 focus:bg-white transition-all duration-300 shadow-sm" />
-          </div>
+            <div className="sm:col-span-2">
+              <input name="cantidad_rosas" type="number" placeholder="¿Cuántas flores quieres?" onChange={cambiar}
+                className="w-full bg-white/80 border border-pink-100 rounded-xl px-4 py-3.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-400/50 focus:border-pink-400 focus:bg-white transition-all duration-300 shadow-sm" />
+            </div>
 
           <div className="relative">
             <select name="tipo_chocolate" onChange={cambiar}
