@@ -2,12 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-
-const supabase = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -18,6 +13,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
 
   const router = useRouter()
+  const supabase = createClient()
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,21 +43,36 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.verifyOtp({
+      // Intentar primero como magiclink
+      const { error: errorMagic } = await supabase.auth.verifyOtp({
         email: email.trim().toLowerCase(),
         token: code.trim(),
-        type: 'email',
+        type: 'magiclink',
       })
 
-      if (error) {
-        console.error('ERROR DETALLADO OTP:', error)
-        throw error
+      if (errorMagic) {
+        console.warn('Fallo magiclink, intentando signup...', errorMagic)
+        // Si falla, intentar como signup
+        const { error: errorSignup } = await supabase.auth.verifyOtp({
+          email: email.trim().toLowerCase(),
+          token: code.trim(),
+          type: 'signup',
+        })
+        
+        if (errorSignup) {
+          console.error('ERROR DETALLADO SIGNUP:', JSON.stringify(errorSignup, null, 2))
+          throw errorSignup
+        }
       }
 
       router.push('/')
       router.refresh()
     } catch (err: any) {
-      setError(err.message || 'Código incorrecto o expirado.')
+      console.error('CATCH COMPLETO:', err)
+      setError(
+        `Error: ${err.message || 'Código inválido'}. ` +
+        `Código HTTP: ${err.status || err.code || 'N/A'}`
+      )
     } finally {
       setLoading(false)
     }
