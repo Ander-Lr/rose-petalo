@@ -2,18 +2,22 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+
+const supabase = createSupabaseClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [step, setStep] = useState<'email' | 'code'>('email')
-  
+
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  
+
   const router = useRouter()
-  const supabase = createClient()
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,13 +26,13 @@ export default function LoginPage() {
 
     try {
       const { error } = await supabase.auth.signInWithOtp({
-        email,
+        email: email.trim(),
         options: {
           shouldCreateUser: true,
         },
       })
       if (error) throw error
-      
+
       setStep('code')
     } catch (err: any) {
       setError(err.message)
@@ -43,13 +47,27 @@ export default function LoginPage() {
     setError(null)
 
     try {
+      // Intentar primero como magiclink (usuarios existentes)
       const { error } = await supabase.auth.verifyOtp({
-        email,
-        token: code,
+        email: email.trim(),
+        token: code.trim(),
         type: 'magiclink',
       })
-      if (error) throw error
-      
+
+      if (error) {
+        // Si falla, intentar como signup (usuarios nuevos)
+        const { error: errorSignup } = await supabase.auth.verifyOtp({
+          email: email.trim(),
+          token: code.trim(),
+          type: 'signup',
+        })
+        
+        if (errorSignup) {
+          console.error('ERROR DETALLADO OTP:', error)
+          throw errorSignup
+        }
+      }
+
       router.push('/')
       router.refresh()
     } catch (err: any) {
@@ -84,17 +102,17 @@ export default function LoginPage() {
           <form onSubmit={handleSendCode} className="space-y-5">
             <p className="text-sm text-gray-600 text-center">Te enviaremos un código de un solo uso a tu correo para ingresar sin contraseña.</p>
             <div>
-              <input 
-                type="email" 
-                placeholder="Tu correo electrónico" 
+              <input
+                type="email"
+                placeholder="Tu correo electrónico"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 className="w-full bg-white/80 border border-pink-100 rounded-xl px-4 py-3.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-400/50 transition-all shadow-sm text-center"
               />
             </div>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold rounded-xl py-4 shadow-xl shadow-pink-500/30 hover:shadow-pink-500/50 hover:from-pink-600 hover:to-rose-600 transition-all flex justify-center items-center"
             >
@@ -105,9 +123,9 @@ export default function LoginPage() {
           <form onSubmit={handleVerifyCode} className="space-y-5">
             <p className="text-sm text-gray-600 text-center">Ingresa el código de 6 dígitos que enviamos a <strong>{email}</strong></p>
             <div>
-              <input 
-                type="text" 
-                placeholder="000000" 
+              <input
+                type="text"
+                placeholder="000000"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 required
@@ -115,15 +133,15 @@ export default function LoginPage() {
                 className="w-full bg-white/80 border border-pink-100 rounded-xl px-4 py-3.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-400/50 transition-all shadow-sm text-center text-2xl tracking-widest font-mono"
               />
             </div>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold rounded-xl py-4 shadow-xl shadow-pink-500/30 hover:shadow-pink-500/50 hover:from-pink-600 hover:to-rose-600 transition-all flex justify-center items-center"
             >
               {loading ? 'Verificando...' : 'Entrar al catálogo'}
             </button>
             <div className="mt-4 text-center">
-              <button 
+              <button
                 type="button"
                 onClick={() => setStep('email')}
                 className="text-pink-500 hover:text-pink-600 font-medium text-sm transition-colors"
