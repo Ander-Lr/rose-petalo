@@ -26,7 +26,7 @@ export default function LoginPage() {
 
     try {
       const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         options: {
           shouldCreateUser: true,
         },
@@ -47,25 +47,15 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      // Intentar primero como magiclink (usuarios existentes)
       const { error } = await supabase.auth.verifyOtp({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         token: code.trim(),
-        type: 'magiclink',
+        type: 'email',
       })
 
       if (error) {
-        // Si falla, intentar como signup (usuarios nuevos)
-        const { error: errorSignup } = await supabase.auth.verifyOtp({
-          email: email.trim(),
-          token: code.trim(),
-          type: 'signup',
-        })
-        
-        if (errorSignup) {
-          console.error('ERROR DETALLADO OTP:', error)
-          throw errorSignup
-        }
+        console.error('ERROR DETALLADO OTP:', error)
+        throw error
       }
 
       router.push('/')
